@@ -1,14 +1,22 @@
-Вимоги:
-	Pyhton 3.7.2
-	Sublime text 3(потрібно щоб був встановлений пакет Python 3)
+# Вимоги:
 
-Щоб скомпілювати програму
-	на MacOS(cmd + shift + B)
-	на Windows(ctrl + shift + B)
+	- Pyhton 3.7.2
 
-Встановлення пакету Python 3 в Sublime:
-	в меню вибираємо Sublime Text, потім(Sublime Text > Preferences > Package Control)
-	у вікні що з'явилося вибираємо Package Control: Install Package і вводимо Python 3 після цього натискаємо Enter
+	- Sublime text 3(потрібно щоб був встановлений пакет Python 3)
 
-Якщо немає Package Control, то:
- в меню вибираємо Tools, потім(Tools > Install Package Control)
+# Щоб скомпілювати програму
+
+	- на MacOS(cmd + shift + B)
+
+	- на Windows(ctrl + shift + B)
+
+# Встановлення пакету Python 3 в Sublime:
+
+	- в меню вибираємо Sublime Text, потім(Sublime Text > Preferences > Package Control)
+
+	- у вікні що з'явилося вибираємо Package Control: Install Package і вводимо Python 3 після цього натискаємо Enter
+
+# Якщо немає Package Control, то:
+
+ - в меню вибираємо Tools, потім(Tools > Install Package Control)
+
