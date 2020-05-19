@@ -111,7 +111,7 @@ def each(pattern, indexes, raitings = range(0, 11)):
       except Exception as e:
         pass
   return docs
-  
+
 def testNegEach(indexes = range(3250, 3501)):
   return each('test:neg/{index}_{raiting}.txt', indexes)
 
@@ -140,3 +140,64 @@ def trainUnsupEach(indexes = range(13000, 14001)):
     for doc in self.docs:
       L = L + doc.data()
     self.result[self.index] = L
+
+def syncRun(docs):
+  L = LexemaList([])
+  start = time.time()
+  for doc in docs:
+    L = L + doc.data()
+  end = time.time()
+  diff = end - start
+  return (L, diff,)
+
+async def asyncRun(docs, CPU = 2):
+  L = LexemaList([])
+  D = docs
+  start = time.time()
+  length = math.ceil(float(len(D))/CPU)
+  dd = [D[i*length:(i+1)*length] for i in range(CPU)]
+  result = [False] * len(dd)
+  Threads = [MyThread(dd[i], result, i) for i in range(len(dd))]
+  for t in Threads:
+    t.start()
+  for t in Threads:
+    t.join()
+  for r in result:
+    if r == False:
+      continue
+    L = L + r
+  end = time.time()
+  diff = end - start
+  return (L, diff,)
+
+async def run(docs, CPU = 2, title = 'run'):
+  L1, t1 = syncRun(docs)
+  L2, t2 = await asyncRun(docs, CPU)
+  format = {
+    'title': title,
+    't1': t1,
+    't2': t2,
+    'dt': t1 - t2,
+    'L1': L1,
+    'L2': L2,
+    'eq': [L1 == L2],
+  }
+  print("{title}: ( sync={t1:0.6f}, async={t2:0.6f}, dt={dt:0.6f}, eq={eq} )".format(**format))
+
+async def main(CPU = 2):
+  docsTestNeg    = testNegEach()
+  docsTestPos    = testPosEach()
+  docsTrainNeg   = trainNegEach()
+  docsTrainPos   = trainPosEach()
+  docsTrainUnsup = trainUnsupEach()
+  docsAll = [*docsTestNeg, *docsTestPos, *docsTrainNeg, *docsTrainPos, *docsTrainUnsup]
+
+  await run(docsTestNeg, CPU = CPU, title = 'test:neg')
+  await run(docsTestPos, CPU = CPU, title = 'test:pos')
+  await run(docsTrainNeg, CPU = CPU, title = 'train:neg')
+  await run(docsTrainPos, CPU = CPU, title = 'train:pos')
+  await run(docsTrainUnsup, CPU = CPU, title = 'train:unsup')
+  await run(docsAll, CPU = CPU, title = 'all')
+
+if __name__ == "__main__":
+  asyncio.run(main(CPU = 4))
