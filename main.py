@@ -57,3 +57,43 @@ class LexemaList:
 
   def __eq__(self, items):
     return str(self) == str(items)
+
+class Doc:
+  sequenceId = 1
+
+  def __init__(self, file):
+    if type(file) != str:
+      raise Exception('Doc(file as not str) undefined')
+    try:
+      f = open(self.path(file), 'r')
+      self.file = file
+      self.docId = Doc.sequenceId
+      Doc.sequenceId += 1
+    except IOError:
+      raise Exception('Doc(file not exists)')
+    finally:
+      f.close()
+
+  def path(self, file):
+    return os.path.dirname(__file__) + '/' + file
+
+  def data(self):
+    f = open(self.path(self.file), "r")
+    fdata = f.read()
+    f.close()
+    ldata = fdata.lower()
+    sdata = re.split('(?:[\s\.\,\!\?\;]|<br[\s]*/>|"|[\d]*/[\d]*)', ldata)
+    data = filter(lambda d: len(d), sdata)
+    D = dict()
+    for d in data:
+      if d in D:
+        D[d] += 1
+      else:
+        D[d] = 1        
+    data = map(lambda d: Lexema(*d, docIds = [self.docId]), D.items())
+    data = list(data)
+    data = LexemaList(data)
+    return data
+
+  def __repr__(self):
+    return 'Doc(id={id}, file={file}, path={path})'.format(file=self.file, id=self.docId, path=self.path(self.file))
