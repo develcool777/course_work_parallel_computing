@@ -97,3 +97,46 @@ class Doc:
 
   def __repr__(self):
     return 'Doc(id={id}, file={file}, path={path})'.format(file=self.file, id=self.docId, path=self.path(self.file))
+
+def each(pattern, indexes, raitings = range(0, 11)):
+  if type(pattern) != str:
+    raise Exception('each(pattern as not str) undefined')
+  docs = []
+  for index in indexes:
+    for raiting in raitings:
+      try:
+        file = pattern.format(index = index, raiting = raiting)
+        doc = Doc(file)
+        docs += [doc]
+      except Exception as e:
+        pass
+  return docs
+  
+def testNegEach(indexes = range(3250, 3501)):
+  return each('test:neg/{index}_{raiting}.txt', indexes)
+
+def testPosEach(indexes = range(3250, 3501)):
+  return each('test:pos/{index}_{raiting}.txt', indexes)
+
+def trainNegEach(indexes = range(3250, 3501)):
+  return each('train:neg/{index}_{raiting}.txt', indexes)
+
+def trainPosEach(indexes = range(3250, 3501)):
+  return each('train:pos/{index}_{raiting}.txt', indexes)
+
+def trainUnsupEach(indexes = range(13000, 14001)):
+  return each('train:unsup/{index}_{raiting}.txt', indexes)
+
+
+  class MyThread(Thread):
+  def __init__(self, docs, result, index):
+    Thread.__init__(self)
+    self.docs = docs
+    self.result = result
+    self.index = index
+  
+  def run(self):
+    L = LexemaList([])
+    for doc in self.docs:
+      L = L + doc.data()
+    self.result[self.index] = L
