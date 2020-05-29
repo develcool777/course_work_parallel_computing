@@ -1,5 +1,8 @@
+#!/usr/bin/env python3
+
 import asyncio
 import math
+from multiprocessing import Process, Queue
 import os
 import re
 from threading import Thread
@@ -26,7 +29,6 @@ class Lexema:
     if self.text != item.text:
       raise Exception('Lexema(A) + Lexema(B): undefind for diff A and B')
     return Lexema(self.text, self.frequence + item.frequence, [*self.docIds, *item.docIds])
-
 
 class LexemaList:
   def __init__(self, items = []):
@@ -57,6 +59,7 @@ class LexemaList:
 
   def __eq__(self, items):
     return str(self) == str(items)
+   
 
 class Doc:
   sequenceId = 1
@@ -82,14 +85,14 @@ class Doc:
     fdata = f.read()
     f.close()
     ldata = fdata.lower()
-    sdata = re.split('(?:[\s\.\,\!\?\;]|<br[\s]*/>|"|[\d]*/[\d]*)', ldata)
+    sdata = re.split('(?:[\s\.\,\!\?\;\{\}\$*\%\&\:\)\()]|<br[\s]*/>|"|[\d]*/[\d]*)|#[\d]*', ldata)
     data = filter(lambda d: len(d), sdata)
     D = dict()
     for d in data:
       if d in D:
         D[d] += 1
       else:
-        D[d] = 1        
+        D[d] = 1
     data = map(lambda d: Lexema(*d, docIds = [self.docId]), D.items())
     data = list(data)
     data = LexemaList(data)
@@ -112,6 +115,7 @@ def each(pattern, indexes, raitings = range(0, 11)):
         pass
   return docs
 
+
 def testNegEach(indexes = range(3250, 3501)):
   return each('test:neg/{index}_{raiting}.txt', indexes)
 
@@ -128,19 +132,6 @@ def trainUnsupEach(indexes = range(13000, 14001)):
   return each('train:unsup/{index}_{raiting}.txt', indexes)
 
 
-  class MyThread(Thread):
-  def __init__(self, docs, result, index):
-    Thread.__init__(self)
-    self.docs = docs
-    self.result = result
-    self.index = index
-  
-  def run(self):
-    L = LexemaList([])
-    for doc in self.docs:
-      L = L + doc.data()
-    self.result[self.index] = L
-
 def syncRun(docs):
   L = LexemaList([])
   start = time.time()
@@ -150,20 +141,35 @@ def syncRun(docs):
   diff = end - start
   return (L, diff,)
 
+class MyProcess(Process):
+  def __init__(self, docs, q, index = None):
+    Process.__init__(self)
+    self.docs = docs
+    self.q = q
+    self.index = index
+  
+  def run(self):
+    L = LexemaList([])
+    for doc in self.docs:
+      L = L + doc.data()
+    self.q.put(L)
+    return 0
+
 async def asyncRun(docs, CPU = 2):
   L = LexemaList([])
   D = docs
   start = time.time()
   length = math.ceil(float(len(D))/CPU)
   dd = [D[i*length:(i+1)*length] for i in range(CPU)]
-  result = [False] * len(dd)
-  Threads = [MyThread(dd[i], result, i) for i in range(len(dd))]
-  for t in Threads:
+  Q = [Queue() for i in range(len(dd))]
+  P = [MyProcess(dd[i], Q[i], index = i) for i in range(len(dd))]
+  for t in P:
     t.start()
-  for t in Threads:
-    t.join()
-  for r in result:
-    if r == False:
+  for t in P:
+    t.join(timeout=0.1)
+  for i, q in enumerate(Q):
+    r = q.get()
+    if not(type(r) == LexemaList):
       continue
     L = L + r
   end = time.time()
@@ -182,22 +188,27 @@ async def run(docs, CPU = 2, title = 'run'):
     'L2': L2,
     'eq': [L1 == L2],
   }
-  print("{title}: ( sync={t1:0.6f}, async={t2:0.6f}, dt={dt:0.6f}, eq={eq} )".format(**format))
+  print("{title}: ( sync={t1:0.3f}, async={t2:0.3f}, dt={dt:0.3f}, eq={eq} )".format(**format))
+  print(repr(L1))
 
 async def main(CPU = 2):
   docsTestNeg    = testNegEach()
   docsTestPos    = testPosEach()
   docsTrainNeg   = trainNegEach()
+  docsHalf       = [*docsTestPos, *docsTestNeg]
   docsTrainPos   = trainPosEach()
   docsTrainUnsup = trainUnsupEach()
-  docsAll = [*docsTestNeg, *docsTestPos, *docsTrainNeg, *docsTrainPos, *docsTrainUnsup]
+  docsAll        = [*docsTestNeg, *docsTestPos, *docsTrainNeg, *docsTrainPos, *docsTrainUnsup]
 
   await run(docsTestNeg, CPU = CPU, title = 'test:neg')
   await run(docsTestPos, CPU = CPU, title = 'test:pos')
   await run(docsTrainNeg, CPU = CPU, title = 'train:neg')
   await run(docsTrainPos, CPU = CPU, title = 'train:pos')
   await run(docsTrainUnsup, CPU = CPU, title = 'train:unsup')
-  await run(docsAll, CPU = CPU, title = 'all')
+  await run(docsHalf, CPU = CPU, title = '500')
+  await run(docsAll, CPU = CPU, title = 'all 2000')
 
 if __name__ == "__main__":
-  asyncio.run(main(CPU = 4))
+  for i in range(1):
+    asyncio.run(main(CPU = 2))
+    print()
