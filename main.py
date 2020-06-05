@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 
-import asyncio
 import math
 from multiprocessing import Process, Queue
 import os
 import re
-from threading import Thread
 import time
 
 
@@ -34,6 +32,7 @@ class LexemaList:
   def __init__(self, items = []):
     if type(items) != list:
       raise Exception('LexemaList(not list) undefind')
+    self.items = items
     self.items = list(filter(lambda item: type(item) == Lexema, items))
     self.items.sort(key = lambda l: l.text)
 
@@ -62,7 +61,7 @@ class LexemaList:
    
 
 class Doc:
-  sequenceId = 1
+  DOCId = 1
 
   def __init__(self, file):
     if type(file) != str:
@@ -70,8 +69,8 @@ class Doc:
     try:
       f = open(self.path(file), 'r')
       self.file = file
-      self.docId = Doc.sequenceId
-      Doc.sequenceId += 1
+      self.docId = Doc.DOCId
+      Doc.DOCId += 1
     except IOError:
       raise Exception('Doc(file not exists)')
     finally:
@@ -81,12 +80,12 @@ class Doc:
     return os.path.dirname(__file__) + '/' + file
 
   def data(self):
-    f = open(self.path(self.file), "r")
+    f = open(self.path(self.file), "r", encoding='utf-8')
     fdata = f.read()
     f.close()
     ldata = fdata.lower()
-    sdata = re.split('(?:[\s\.\,\!\?\;\{\}\$*\%\&\:\)\()]|<br[\s]*/>|"|[\d]*/[\d]*)|#[\d]*', ldata)
-    data = filter(lambda d: len(d), sdata)
+    sdata = re.split('(?:[\s\.\,\!\?\;\{\}\$*\%\&\:\)\(\+\-\[\]\@]|<br[\s]*/>|"|\'|`|[\d]*/[\d]*)|#[\d]*|[\d]', ldata)
+    data = filter(lambda d: len(d) and not(d in []), sdata)
     D = dict()
     for d in data:
       if d in D:
@@ -97,9 +96,6 @@ class Doc:
     data = list(data)
     data = LexemaList(data)
     return data
-
-  def __repr__(self):
-    return 'Doc(id={id}, file={file}, path={path})'.format(file=self.file, id=self.docId, path=self.path(self.file))
 
 def each(pattern, indexes, raitings = range(0, 11)):
   if type(pattern) != str:
@@ -114,8 +110,7 @@ def each(pattern, indexes, raitings = range(0, 11)):
       except Exception as e:
         pass
   return docs
-
-
+ 
 def testNegEach(indexes = range(3250, 3501)):
   return each('test:neg/{index}_{raiting}.txt', indexes)
 
@@ -131,6 +126,9 @@ def trainPosEach(indexes = range(3250, 3501)):
 def trainUnsupEach(indexes = range(13000, 14001)):
   return each('train:unsup/{index}_{raiting}.txt', indexes)
 
+def testAll(indexes = range(0, 10000)):
+  return each('test:all/{index}_{raiting}.txt', indexes)
+
 
 def syncRun(docs):
   L = LexemaList([])
@@ -142,11 +140,10 @@ def syncRun(docs):
   return (L, diff,)
 
 class MyProcess(Process):
-  def __init__(self, docs, q, index = None):
+  def __init__(self, docs, q):
     Process.__init__(self)
     self.docs = docs
     self.q = q
-    self.index = index
   
   def run(self):
     L = LexemaList([])
@@ -155,30 +152,30 @@ class MyProcess(Process):
     self.q.put(L)
     return 0
 
-async def asyncRun(docs, CPU = 2):
+def asyncRun(docs, CPU = 2):
   L = LexemaList([])
   D = docs
-  start = time.time()
   length = math.ceil(float(len(D))/CPU)
   dd = [D[i*length:(i+1)*length] for i in range(CPU)]
   Q = [Queue() for i in range(len(dd))]
-  P = [MyProcess(dd[i], Q[i], index = i) for i in range(len(dd))]
+  P = [MyProcess(dd[i], Q[i]) for i in range(len(dd))]
   for t in P:
     t.start()
   for t in P:
-    t.join(timeout=0.1)
-  for i, q in enumerate(Q):
+    t.join(timeout=0.9)
+  for q in Q:
     r = q.get()
     if not(type(r) == LexemaList):
       continue
     L = L + r
-  end = time.time()
-  diff = end - start
-  return (L, diff,)
+  return L
 
-async def run(docs, CPU = 2, title = 'run'):
+def run(docs, CPU = 2, title = 'run'):
   L1, t1 = syncRun(docs)
-  L2, t2 = await asyncRun(docs, CPU)
+  start = time.time()
+  L2 = asyncRun(docs, CPU)
+  end = time.time()
+  t2 = end - start
   format = {
     'title': title,
     't1': t1,
@@ -189,26 +186,27 @@ async def run(docs, CPU = 2, title = 'run'):
     'eq': [L1 == L2],
   }
   print("{title}: ( sync={t1:0.3f}, async={t2:0.3f}, dt={dt:0.3f}, eq={eq} )".format(**format))
-  print(repr(L1))
+  # print(repr(L1))
 
-async def main(CPU = 2):
+
+def main(CPU = 2):
   docsTestNeg    = testNegEach()
-  docsTestPos    = testPosEach()
-  docsTrainNeg   = trainNegEach()
-  docsHalf       = [*docsTestPos, *docsTestNeg]
-  docsTrainPos   = trainPosEach()
-  docsTrainUnsup = trainUnsupEach()
-  docsAll        = [*docsTestNeg, *docsTestPos, *docsTrainNeg, *docsTrainPos, *docsTrainUnsup]
+  # docsTestPos    = testPosEach()
+  # docsTrainNeg   = trainNegEach()
+  # docsHalf       = [*docsTestPos, *docsTestNeg]
+  # docsTrainPos   = trainPosEach()
+  # docsTrainUnsup = trainUnsupEach()
+  # docsAll        = [*docsTestNeg, *docsTestPos, *docsTrainNeg, *docsTrainPos, *docsTrainUnsup]
+  # docsReallyAll  = testAll()
 
-  await run(docsTestNeg, CPU = CPU, title = 'test:neg')
-  await run(docsTestPos, CPU = CPU, title = 'test:pos')
-  await run(docsTrainNeg, CPU = CPU, title = 'train:neg')
-  await run(docsTrainPos, CPU = CPU, title = 'train:pos')
-  await run(docsTrainUnsup, CPU = CPU, title = 'train:unsup')
-  await run(docsHalf, CPU = CPU, title = '500')
-  await run(docsAll, CPU = CPU, title = 'all 2000')
+  run(docsTestNeg, CPU = CPU, title = 'test:neg')
+  # run(docsTestPos, CPU = CPU, title = 'test:pos')
+  # run(docsTrainNeg, CPU = CPU, title = 'train:neg')
+  # run(docsTrainPos, CPU = CPU, title = 'train:pos')
+  # run(docsTrainUnsup, CPU = CPU, title = 'train:unsup')
+  # run(docsHalf, CPU = CPU, title = '500')
+  # run(docsAll, CPU = CPU, title = 'all 2000')
+  # run(docsReallyAll, CPU = CPU, title = 'all 50000')
 
 if __name__ == "__main__":
-  for i in range(1):
-    asyncio.run(main(CPU = 2))
-    print()
+    main(CPU = 2)
